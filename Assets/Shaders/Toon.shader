@@ -1,0 +1,91 @@
+Shader "Custom/Toon"
+{
+	Properties
+	{
+		_MainTex("Texture", 2D) = "white" {}
+		[HDR]
+		_Color("Color", Color) = (0.4,0.4,0.4,1)
+
+		[HDR]
+		_SpecularColor("Specular Color", Color) = (0.9,0.9,0.9,1)
+		_Glossiness("Glossiness", Float) = 32
+
+
+		[HDR]
+		_RimColor("Rim Color", Color) = (1,1,1,1)
+		_RimAmount("Rim Amount", Range(0, 1)) = 0.716
+	}
+		SubShader
+		{
+			Tags {
+				"LightMode" = "ForwardBase"
+				"PassFlags" = "OnlyDirectional"
+			}
+
+			Pass {
+				CGPROGRAM
+					#pragma vertex vert
+					#pragma fragment frag
+					#include "UnityCG.cginc"
+					#include "Lighting.cginc"
+
+					float4 _Color;
+					float _Glossiness;
+					float4 _SpecularColor;
+					float4 _RimColor;
+					float _RimAmount;
+
+					sampler2D _MainTex;
+
+
+					struct VertexInput {
+						float4 vertex : POSITION;
+						float3 normal : NORMAL;
+						float4 texcoord : TEXCOORD0;
+					};
+
+				struct VertexOutput {
+					float4 pos : SV_POSITION;
+					float3 worldNormal : NORMAL;
+					float4 texcoord : TEXCOORD0;
+					float3 viewDir : TEXCOORD1;
+				};
+
+				VertexOutput vert(VertexInput input) {
+					VertexOutput output;
+					output.pos = UnityObjectToClipPos(input.vertex);
+					output.worldNormal = UnityObjectToWorldNormal(input.normal);
+					output.texcoord = input.texcoord;
+					output.viewDir = WorldSpaceViewDir(input.vertex);
+
+					return output;
+				}
+
+				fixed4 frag(VertexOutput i) : COLOR {
+					float3 normal = normalize(i.worldNormal);
+					float NdotL = dot(_WorldSpaceLightPos0, normal);
+					float lightIntensity = smoothstep(0, 0.01, NdotL);
+
+					float4 light = lightIntensity * _LightColor0;
+
+					float3 viewDir = normalize(i.viewDir);
+					float3 halfVector = normalize(_WorldSpaceLightPos0 + viewDir);
+					float NdotH = dot(normal, halfVector);
+
+					float specularIntensity = pow(NdotH * lightIntensity, _Glossiness * _Glossiness);
+					float specularIntensitySmooth = smoothstep(0.005, 0.01, specularIntensity);
+					float4 specular = specularIntensitySmooth * _SpecularColor;
+
+					float4 rimDot = 1 - dot(viewDir, normal);
+					float rimIntensity = smoothstep(_RimAmount - 0.01, _RimAmount + 0.01, rimDot);
+					float4 rim = rimIntensity * _RimColor;
+
+					float4 texColor = tex2D(_MainTex, i.texcoord.xy);
+
+					return _Color * texColor * (light + specular + rim);
+				}
+			ENDCG
+		}
+    }
+    FallBack "Diffuse"
+}
